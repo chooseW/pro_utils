@@ -31,20 +31,20 @@ const vue2Template = `
     <div><h1>[name]</h1></div>
     </template>
     <style lang="${fileOptions["cssCompiler"]}" scoped>
-    </style>"
+    </style>
 `;
 
 /**
  * 生成Vue3模板的默认内容
  */
 const vue3Template = `
-    <script${fileOptions["isTypeScript"] ? 'lang="ts"' : ""}>
+    <script${fileOptions["isTypeScript"] ? ' lang="ts"' : ""}>
     </script>
     <template>
     <div><h1>[name]</h1></div>
     </template>
     <style lang="${fileOptions["cssCompiler"]}" scoped>
-    </style>"
+    </style>
 `;
 
 /**
@@ -181,7 +181,7 @@ const recursionCreateFile = (list, defaultPath = "") => {
         fileContent = jsxTemplate;
         break;
       default:
-        console.err("您输入的后缀名有问题请使用jsx|tsx|vue等");
+        console.error("您输入的后缀名有问题请使用jsx|tsx|vue等");
         return;
     }
     fileContent = fileContent.replace(
@@ -190,12 +190,12 @@ const recursionCreateFile = (list, defaultPath = "") => {
     );
 
     // 父路由生成文件夹
-    genrateFolder(item[parentFolder] ? paths : paths.slice(0, -1));
+    generateFolder(item[parentFolder] ? paths : paths.slice(0, -1));
     // 父路由生成文件
     if (fileOptions[parentFolder] && item[children])
-      genrateFile(paths, fileContent);
+      generateFile(paths, fileContent);
     // 生成文件
-    if (!item[children]) genrateFile(paths, fileContent);
+    if (!item[children]) generateFile(paths, fileContent);
   }
 };
 
@@ -204,11 +204,15 @@ const recursionCreateFile = (list, defaultPath = "") => {
  * @param {Array<string>} paths 路径文件
  * @param {string} defaultPath 路由没有/开头默认拼接父级path
  */
-const genrateFolder = (paths) => {
+const generateFolder = (paths) => {
   const folderPath = path.join(basePath, paths.join("/"));
   fs.lstat(folderPath, (err) => {
     if (err) {
-      fs.mkdir(folderPath, () => {
+      fs.mkdir(folderPath, { recursive: true }, (mkdirErr) => {
+        if (mkdirErr) {
+          console.error("文件夹创建失败:", mkdirErr);
+          return;
+        }
         console.log("文件夹生成成功", folderPath);
       });
     }
@@ -220,7 +224,7 @@ const genrateFolder = (paths) => {
  * @param {Array<string>} paths 路径文件
  * @param {string} content 模板数据
  */
-const genrateFile = (paths, content) => {
+const generateFile = (paths, content) => {
   const folderPath = path.join(basePath, paths.join("/"));
   const filename =
     folderPath +
@@ -229,11 +233,17 @@ const genrateFile = (paths, content) => {
         ? fileOptions["fileSuffix"]
         : "." + fileOptions["fileSuffix"]
     }`;
-  fs.lstat(filename, (err, e) => {
+  fs.lstat(filename, (err) => {
     if (err) {
-      fs.writeFile(filename, content, "utf-8", () => {
+      fs.writeFile(filename, content, "utf-8", (writeErr) => {
+        if (writeErr) {
+          console.error("文件创建失败:", writeErr);
+          return;
+        }
         console.log("文件生成成功", filename);
       });
+    } else {
+      console.warn(`文件 ${filename} 已存在，跳过创建`);
     }
   });
 };
