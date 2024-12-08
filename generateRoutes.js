@@ -17,6 +17,8 @@ let fileOptions = {
   cssCompiler: "css",
   // 是否有ts
   isTypeScript: true,
+  // 是否是需要index
+  isIndex: false,
 };
 let basePath = "./";
 
@@ -79,6 +81,13 @@ const validateOptionsWithData = (files, options) => {
       );
     }
   }
+  for (const key in options) {
+    if (options[key] in testItem) {
+      fileOptions[key] = options[key];
+    } else if (options[key] in fileOptions) {
+      fileOptions[key] = options[key];
+    }
+  }
 };
 
 /**
@@ -94,7 +103,7 @@ const pathFiles = (filename, files = [], options = null) => {
   validateOptionsWithData(files, options || fileOptions);
 
   const url = path.join(__dirname, filename);
-  if (options) fileOptions = options;
+  // if (options) fileOptions = options;
   basePath = url;
   recursionCreateFile(files);
 };
@@ -162,7 +171,7 @@ const recursionCreateFile = (list, defaultPath = "") => {
   const { name, path, children, parentFolder } = fileOptions;
   for (const item of list) {
     if (item[children]) recursionCreateFile(item.children, item[path]);
-    const paths = item[path].split("/");
+    const paths = [defaultPath, ...item[path].split("/")];
 
     // 默认文件内容
     let fileContent = "";
@@ -190,10 +199,19 @@ const recursionCreateFile = (list, defaultPath = "") => {
     );
 
     // 父路由生成文件夹
-    generateFolder(item[parentFolder] ? paths : paths.slice(0, -1));
+    generateFolder(
+      item[parentFolder]
+        ? paths
+        : fileOptions["isIndex"]
+        ? paths
+        : paths.slice(0, -1)
+    );
     // 父路由生成文件
     if (fileOptions[parentFolder] && item[children])
-      generateFile(paths, fileContent);
+      generateFile(
+        fileContent["isIndex"] ? paths.slice(0, -1) : paths,
+        fileContent
+      );
     // 生成文件
     if (!item[children]) generateFile(paths, fileContent);
   }
@@ -225,7 +243,11 @@ const generateFolder = (paths) => {
  * @param {string} content 模板数据
  */
 const generateFile = (paths, content) => {
-  const folderPath = path.join(basePath, paths.join("/"));
+  const folderPath = path.join(
+    basePath,
+    paths.join("/"),
+    fileOptions["isIndex"] ? "index" : ""
+  );
   const filename =
     folderPath +
     `${
@@ -237,7 +259,7 @@ const generateFile = (paths, content) => {
     if (err) {
       fs.writeFile(filename, content, "utf-8", (writeErr) => {
         if (writeErr) {
-          console.error("文件创建失败:", writeErr);
+          console.error("文件创建失败:", writeErr, filename);
           return;
         }
         console.log("文件生成成功", filename);
@@ -247,5 +269,27 @@ const generateFile = (paths, content) => {
     }
   });
 };
+
+pathFiles(
+  "./page/",
+  [
+    {
+      id: 1,
+      parentID: 0,
+      name: "系统",
+      url: "/system",
+      children: [
+        { id: 11, parentID: 1, name: "首页", url: "dashoboard" },
+        { id: 12, parentID: 1, name: "系统设置", url: "settings" },
+      ],
+    },
+  ],
+  {
+    path: "url",
+    name: "id",
+    isIndex: true,
+    parentFolder: true,
+  }
+);
 
 module.exports = pathFiles;
