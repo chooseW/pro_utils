@@ -84,7 +84,7 @@ const validateOptionsWithData = (files, options) => {
   for (const key in options) {
     if (options[key] in testItem) {
       fileOptions[key] = options[key];
-    } else if (options[key] in fileOptions) {
+    } else if (key in fileOptions) {
       fileOptions[key] = options[key];
     }
   }
@@ -101,6 +101,9 @@ const pathFiles = (filename, files = [], options = null) => {
   validatorParams(options || {});
   // 添加新的验证
   validateOptionsWithData(files, options || fileOptions);
+
+  // 试着创建一级入口文件夹
+  generateFolder(filename.split("/"));
 
   const url = path.join(__dirname, filename);
   // if (options) fileOptions = options;
@@ -167,11 +170,15 @@ const validatorParams = (params) => {
  * @param {Array} list 后端返回的路由数组
  * @param {string} defaultPath 可包含父路径
  */
-const recursionCreateFile = (list, defaultPath = "") => {
-  const { name, path, children, parentFolder } = fileOptions;
+const recursionCreateFile = (list, defaultPath = []) => {
+  const { name, path: pathName, children, parentFolder } = fileOptions;
+
   for (const item of list) {
-    if (item[children]) recursionCreateFile(item.children, item[path]);
-    const paths = [defaultPath, ...item[path].split("/")];
+    if (item[children])
+      recursionCreateFile(item.children, item[pathName].split("/"));
+
+    // 文件路径，包含父路径
+    const paths = [...defaultPath, ...item[pathName].split("/")];
 
     // 默认文件内容
     let fileContent = "";
@@ -198,22 +205,51 @@ const recursionCreateFile = (list, defaultPath = "") => {
       item[name] || paths[paths.length - 1]
     );
 
-    // 父路由生成文件夹
-    generateFolder(
-      item[parentFolder]
-        ? paths
-        : fileOptions["isIndex"]
-        ? paths
-        : paths.slice(0, -1)
-    );
-    // 父路由生成文件
-    if (fileOptions[parentFolder] && item[children])
-      generateFile(
-        fileContent["isIndex"] ? paths.slice(0, -1) : paths,
-        fileContent
-      );
-    // 生成文件
-    if (!item[children]) generateFile(paths, fileContent);
+    paths.forEach((ipath, index) => {
+      if (ipath === "") return;
+      if (fileOptions["isIndex"]) {
+        // 生成index文件
+        generateFolder(paths.slice(0, index + 1))
+          .then((folderPath) => {
+            generateFile(
+              path.join(
+                folderPath,
+                `index${suffix.startsWith(".") ? suffix : "." + suffix}`
+              ),
+              fileContent
+            ).then((file) => {
+              console.log(file, "文件创建成功");
+            });
+          })
+          .catch((err) => {
+            if (err.code === "EEXIST") {
+              console.warn("文件已存在,跳过创建");
+              return;
+            }
+            console.log(err);
+          });
+      }
+    });
+    if (fileOptions["isIndex"]) return;
+    // 数组最后一个为文件名
+    generateFolder(paths.slice(0, -1));
+    generateFolder(paths.slice(0, -1))
+      .then((folderPath) => {
+        const filePath = path.join(
+          folderPath,
+          `${paths[paths.length - 1]}${
+            suffix.startsWith(".") ? suffix : "." + suffix
+          }`
+        );
+        generateFile(filePath, fileContent).then((file) => {
+          console.log(file, "文件创建成功");
+        });
+      })
+      .catch((err) => {
+        if (err.code === "EEXIST") {
+          console.warn("文件已存在,跳过创建");
+        }
+      });
   }
 };
 
@@ -223,73 +259,49 @@ const recursionCreateFile = (list, defaultPath = "") => {
  * @param {string} defaultPath 路由没有/开头默认拼接父级path
  */
 const generateFolder = (paths) => {
-  const folderPath = path.join(basePath, paths.join("/"));
-  fs.lstat(folderPath, (err) => {
-    if (err) {
-      fs.mkdir(folderPath, { recursive: true }, (mkdirErr) => {
-        if (mkdirErr) {
-          console.error("文件夹创建失败:", mkdirErr);
-          return;
-        }
-        console.log("文件夹生成成功", folderPath);
-      });
-    }
+  return new Promise((resolve, reject) => {
+    const folderPath = path.join(basePath, paths.join("/"));
+    fs.lstat(folderPath, (err, e) => {
+      if (err) {
+        // 文件夹不存在，创建文件夹
+        fs.mkdir(folderPath, { recursive: true }, (mkdirErr) => {
+          if (mkdirErr) {
+            reject(mkdirErr);
+          }
+        });
+      }
+      resolve(folderPath);
+    });
   });
 };
 
 /**
  * 生成文件
- * @param {Array<string>} paths 路径文件
+ * @param {string} filename 路径文件
  * @param {string} content 模板数据
  */
-const generateFile = (paths, content) => {
-  const folderPath = path.join(
-    basePath,
-    paths.join("/"),
-    fileOptions["isIndex"] ? "index" : ""
-  );
-  const filename =
-    folderPath +
-    `${
-      fileOptions["fileSuffix"].includes(".")
-        ? fileOptions["fileSuffix"]
-        : "." + fileOptions["fileSuffix"]
-    }`;
-  fs.lstat(filename, (err) => {
-    if (err) {
-      fs.writeFile(filename, content, "utf-8", (writeErr) => {
-        if (writeErr) {
-          console.error("文件创建失败:", writeErr, filename);
-          return;
-        }
-        console.log("文件生成成功", filename);
-      });
-    } else {
-      console.warn(`文件 ${filename} 已存在，跳过创建`);
-    }
+const generateFile = (filename, content) => {
+  return new Promise((resolve, reject) => {
+    fs.lstat(filename, (err) => {
+      if (err) {
+        fs.writeFile(filename, content, "utf-8", (writeErr) => {
+          if (writeErr) {
+            reject(writeErr);
+            return;
+          }
+          resolve(filename);
+        });
+      } else {
+        resolve(filename);
+      }
+    });
   });
 };
 
 pathFiles(
   "./page/",
-  [
-    {
-      id: 1,
-      parentID: 0,
-      name: "系统",
-      url: "/system",
-      children: [
-        { id: 11, parentID: 1, name: "首页", url: "dashoboard" },
-        { id: 12, parentID: 1, name: "系统设置", url: "settings" },
-      ],
-    },
-  ],
-  {
-    path: "url",
-    name: "id",
-    isIndex: true,
-    parentFolder: true,
-  }
+  [{ id: 1, parentID: 0, name: "系统", url: "/system", children: [] }],
+  { isIndex: true, path: "url" }
 );
 
 module.exports = pathFiles;
