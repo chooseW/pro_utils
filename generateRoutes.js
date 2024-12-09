@@ -298,10 +298,4 @@ const generateFile = (filename, content) => {
   });
 };
 
-pathFiles(
-  "./page/",
-  [{ id: 1, parentID: 0, name: "系统", url: "/system", children: [] }],
-  { isIndex: true, path: "url" }
-);
-
 module.exports = pathFiles;
